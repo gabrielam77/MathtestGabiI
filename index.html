@@ -457,11 +457,8 @@
         // Update status display
         function updateStatus(message, type) {
             const statusEl = document.getElementById('status');
-            const indicator = statusEl.querySelector('.voice-indicator');
-            
-            statusEl.textContent = message;
             statusEl.className = `status ${type}`;
-            indicator.className = `voice-indicator ${type}`;
+            statusEl.innerHTML = `<span class="voice-indicator ${type}"></span>${message}`;
         }
 
         // Show error message
