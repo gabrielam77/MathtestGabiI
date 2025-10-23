@@ -245,6 +245,7 @@
         <div class="controls">
             <button id="startBtn" onclick="startSession()">Начать</button>
             <button id="stopBtn" onclick="stopSession()" disabled>Остановить</button>
+            <button id="skipBtn" onclick="skipQuestion()" disabled>Пропустить</button>
             <button id="resetBtn" onclick="resetSession()">Сброс</button>
         </div>
 
@@ -577,6 +578,21 @@
                     console.log('Starting speech recognition...');
                     try {
                         speechRecognition.start();
+                        
+                        // Set a timeout to handle cases where speech recognition doesn't respond
+                        setTimeout(() => {
+                            if (sessionState.isListening && sessionState.isActive) {
+                                console.log('Speech recognition timeout - no response received');
+                                speechRecognition.stop();
+                                showError('Не услышал ответ. Попробуйте еще раз.');
+                                setTimeout(() => {
+                                    if (sessionState.isActive) {
+                                        askCurrentQuestion();
+                                    }
+                                }, 2000);
+                            }
+                        }, 10000); // 10 second timeout
+                        
                     } catch (error) {
                         console.error('Error starting speech recognition:', error);
                         showError('Ошибка запуска распознавания речи. Попробуйте еще раз.');
@@ -658,6 +674,7 @@
             
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
+            document.getElementById('skipBtn').disabled = false;
             document.getElementById('historyList').innerHTML = '';
             
             updateStatus('Начинаем урок...', 'waiting');
@@ -665,6 +682,39 @@
             
             await speak('Привет! Давайте решать примеры.');
             await askCurrentQuestion();
+        }
+
+        // Skip current question
+        function skipQuestion() {
+            if (!sessionState.isActive || !sessionState.currentQuestion) return;
+            
+            console.log('Skipping question');
+            
+            // Stop any ongoing speech recognition
+            if (speechRecognition && sessionState.isListening) {
+                speechRecognition.stop();
+            }
+            
+            // Mark as incorrect and add to errors
+            const currentQuestion = sessionState.currentQuestion;
+            addToHistory(currentQuestion.question, 'пропущено', currentQuestion.answer, false);
+            sessionState.errors.push(currentQuestion);
+            
+            showError(`Пропущено. Правильный ответ: ${currentQuestion.answer}`);
+            
+            // Move to next question
+            sessionState.currentQuestionIndex++;
+            updateProgress();
+            
+            setTimeout(() => {
+                if (sessionState.isActive) {
+                    if (sessionState.currentQuestionIndex < questions[`label${sessionState.currentLabel}`].length) {
+                        askCurrentQuestion();
+                    } else {
+                        completeCurrentLabel();
+                    }
+                }
+            }, 2000);
         }
 
         // Stop session
@@ -682,6 +732,7 @@
             
             document.getElementById('startBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
+            document.getElementById('skipBtn').disabled = true;
             
             updateStatus('Урок остановлен', 'waiting');
             saveSession();
