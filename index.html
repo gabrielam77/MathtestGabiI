@@ -356,20 +356,23 @@
             speechRecognition.maxAlternatives = 1;
 
             speechRecognition.onstart = () => {
+                console.log('✅ Speech recognition STARTED');
                 sessionState.isListening = true;
                 updateStatus('Слушаю ваш ответ...', 'listening');
             };
 
             speechRecognition.onresult = (event) => {
+                console.log('✅ Speech recognition RESULT:', event.results[0][0].transcript);
                 const result = event.results[0][0].transcript.toLowerCase().trim();
                 processAnswer(result);
             };
 
             speechRecognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
+                console.error('❌ Speech recognition ERROR:', event.error);
                 sessionState.isListening = false;
                 
                 if (event.error === 'no-speech') {
+                    console.log('🔄 No speech detected - retrying...');
                     showError('Не услышал ответ. Попробуйте еще раз.');
                     setTimeout(() => {
                         if (sessionState.isActive) {
@@ -385,6 +388,7 @@
             };
 
             speechRecognition.onend = () => {
+                console.log('✅ Speech recognition ENDED');
                 sessionState.isListening = false;
                 if (sessionState.isActive) {
                     updateStatus('Готов к следующему вопросу', 'waiting');
