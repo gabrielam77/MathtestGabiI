@@ -364,12 +364,21 @@
 
             speechRecognition.onresult = (event) => {
                 console.log('✅ Speech recognition RESULT:', event.results);
-                
+                if (sessionState.processingAnswer) {
+                    console.log('Ignoring result while processing answer');
+                    return;
+                }
                 // Get the final result (not interim)
                 for (let i = event.results.length - 1; i >= 0; i--) {
-                    if (event.results[i].isFinal) {
-                        const result = event.results[i][0].transcript.toLowerCase().trim();
+                    const res = event.results[i];
+                    if (res.isFinal) {
+                        const result = res[0].transcript.toLowerCase().trim();
                         console.log('✅ Final transcript:', result);
+                        if (!sessionState.currentQuestion) {
+                            console.log('No current question set, ignoring late result');
+                            return;
+                        }
+                        try { speechRecognition.stop(); } catch (e) {}
                         processAnswer(result);
                         break;
                     }
@@ -441,11 +450,17 @@
 
         // Parse Russian number from speech
         function parseRussianNumber(speech) {
-            const words = speech.split(' ');
+            const trimmed = (speech || '').toString().trim();
+            // If transcript contains digits (e.g., "10"), parse directly
+            const digitMatch = trimmed.match(/\d+/);
+            if (digitMatch) {
+                const n = parseInt(digitMatch[0], 10);
+                if (!Number.isNaN(n)) return n;
+            }
+            // Try match known russian words
+            const words = trimmed.split(/\s+/);
             for (let word of words) {
-                if (russianNumbers[word]) {
-                    return russianNumbers[word];
-                }
+                if (russianNumbers[word]) return russianNumbers[word];
             }
             return null;
         }
@@ -551,6 +566,8 @@
                 return;
             }
             sessionState.processingAnswer = true;
+            // Pause recognition while processing
+            try { if (sessionState.isListening) speechRecognition.stop(); } catch (e) {}
             
             const userAnswer = parseRussianNumber(speech);
             const currentQuestion = sessionState.currentQuestion;
@@ -581,6 +598,8 @@
 
             // Move to next question
             sessionState.currentQuestionIndex++;
+            // Clear currentQuestion to avoid late-result crashes
+            sessionState.currentQuestion = null;
             updateProgress();
             
             setTimeout(() => {
@@ -600,7 +619,13 @@
             console.log('Asking question:', sessionState.currentQuestionIndex, 'of', questions[`label${sessionState.currentLabel}`].length);
             
             const currentQuestions = questions[`label${sessionState.currentLabel}`];
+            if (sessionState.currentQuestionIndex >= currentQuestions.length) {
+                console.log('Index at end of questions, completing label');
+                await completeCurrentLabel();
+                return;
+            }
             sessionState.currentQuestion = currentQuestions[sessionState.currentQuestionIndex];
+            sessionState.processingAnswer = false;
             
             document.getElementById('questionDisplay').textContent = sessionState.currentQuestion.question;
             
