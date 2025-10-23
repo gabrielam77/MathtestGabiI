@@ -366,8 +366,20 @@
 
             speechRecognition.onerror = (event) => {
                 console.error('Speech recognition error:', event.error);
-                showError('Ошибка распознавания речи: ' + event.error);
                 sessionState.isListening = false;
+                
+                if (event.error === 'no-speech') {
+                    showError('Не услышал ответ. Попробуйте еще раз.');
+                    setTimeout(() => {
+                        if (sessionState.isActive) {
+                            askCurrentQuestion();
+                        }
+                    }, 2000);
+                } else if (event.error === 'network') {
+                    showError('Ошибка сети. Проверьте подключение к интернету.');
+                } else {
+                    showError('Ошибка распознавания речи: ' + event.error);
+                }
                 updateStatus('Ошибка распознавания', 'waiting');
             };
 
@@ -514,7 +526,11 @@
             
             if (userAnswer === null) {
                 showError('Не удалось распознать число. Попробуйте еще раз.');
-                setTimeout(() => askCurrentQuestion(), 2000);
+                setTimeout(() => {
+                    if (sessionState.isActive) {
+                        askCurrentQuestion();
+                    }
+                }, 2000);
                 return;
             }
 
@@ -534,16 +550,20 @@
             updateProgress();
             
             setTimeout(() => {
-                if (sessionState.currentQuestionIndex < questions[`label${sessionState.currentLabel}`].length) {
-                    askCurrentQuestion();
-                } else {
-                    completeCurrentLabel();
+                if (sessionState.isActive) {
+                    if (sessionState.currentQuestionIndex < questions[`label${sessionState.currentLabel}`].length) {
+                        askCurrentQuestion();
+                    } else {
+                        completeCurrentLabel();
+                    }
                 }
             }, 2000);
         }
 
         // Ask current question
         async function askCurrentQuestion() {
+            console.log('Asking question:', sessionState.currentQuestionIndex, 'of', questions[`label${sessionState.currentLabel}`].length);
+            
             const currentQuestions = questions[`label${sessionState.currentLabel}`];
             sessionState.currentQuestion = currentQuestions[sessionState.currentQuestionIndex];
             
@@ -553,8 +573,19 @@
             
             // Start listening for answer
             setTimeout(() => {
-                if (sessionState.isActive) {
-                    speechRecognition.start();
+                if (sessionState.isActive && !sessionState.isListening) {
+                    console.log('Starting speech recognition...');
+                    try {
+                        speechRecognition.start();
+                    } catch (error) {
+                        console.error('Error starting speech recognition:', error);
+                        showError('Ошибка запуска распознавания речи. Попробуйте еще раз.');
+                        setTimeout(() => {
+                            if (sessionState.isActive) {
+                                askCurrentQuestion();
+                            }
+                        }, 2000);
+                    }
                 }
             }, 1000);
         }
