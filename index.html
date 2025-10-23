@@ -657,49 +657,27 @@
             const totalQuestions = questions[`label${sessionState.currentLabel}`].length;
             const errorCount = sessionState.errors.length;
             
-            let message = `Всего было ${totalQuestions} вопросов, неправильных ответов: ${errorCount}`;
+            // Always announce only statistics; do not repeat questions
+            let message = `Всего было ${totalQuestions} вопросов, неправильных ответов: ${errorCount}.`;
+            await speak(message);
             
-            if (errorCount > 0) {
-                message += '. Правильные ответы: ';
-                sessionState.errors.forEach(error => {
-                    message += `${error.question} = ${error.answer}, `;
-                });
-                message = message.slice(0, -2) + '. Повторяем.';
-                
-                await speak(message);
-                
-                // Reset for retry
+            // Clear errors and proceed based on label
+            sessionState.errors = [];
+            
+            if (sessionState.currentLabel === 1) {
+                await speak('Переходим к следующему уровню.');
+                sessionState.currentLabel = 2;
                 sessionState.currentQuestionIndex = 0;
-                sessionState.errors = [];
                 updateProgress();
-                
-                setTimeout(() => askCurrentQuestion(), 3000);
+                setTimeout(() => askCurrentQuestion(), 2000);
             } else {
-                if (sessionState.currentLabel === 1) {
-                    message += '. Переходим к следующему уровню.';
-                    await speak(message);
-                    
-                    // Move to label 2
-                    sessionState.currentLabel = 2;
-                    sessionState.currentQuestionIndex = 0;
-                    sessionState.errors = [];
-                    updateProgress();
-                    
-                    setTimeout(() => askCurrentQuestion(), 3000);
-                } else {
-                    message = 'Ты хорошо поработал!';
-                    await speak(message);
-                    showSuccess(message);
-                    
-                    // Session complete
-                    sessionState.isActive = false;
-                    updateStatus('Урок завершен!', 'waiting');
-                    document.getElementById('startBtn').disabled = false;
-                    document.getElementById('stopBtn').disabled = true;
-                    
-                    // Save completion to localStorage
-                    saveSession();
-                }
+                await speak('Ты хорошо поработал!');
+                showSuccess('Ты хорошо поработал!');
+                sessionState.isActive = false;
+                updateStatus('Урок завершен!', 'waiting');
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                saveSession();
             }
         }
 
