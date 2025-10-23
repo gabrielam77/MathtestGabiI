@@ -330,7 +330,8 @@
             isListening: false,
             isSpeaking: false,
             currentQuestion: null,
-            sessionHistory: []
+            sessionHistory: [],
+            processingAnswer: false
         };
 
         // Voice services
@@ -544,12 +545,22 @@
 
         // Process user answer
         function processAnswer(speech) {
+            // Prevent multiple rapid calls
+            if (sessionState.processingAnswer) {
+                console.log('Already processing answer, ignoring duplicate');
+                return;
+            }
+            sessionState.processingAnswer = true;
+            
             const userAnswer = parseRussianNumber(speech);
             const currentQuestion = sessionState.currentQuestion;
+            
+            console.log('Processing answer:', userAnswer, 'for question:', currentQuestion.question);
             
             if (userAnswer === null) {
                 showError('Не удалось распознать число. Попробуйте еще раз.');
                 setTimeout(() => {
+                    sessionState.processingAnswer = false;
                     if (sessionState.isActive) {
                         askCurrentQuestion();
                     }
@@ -573,6 +584,7 @@
             updateProgress();
             
             setTimeout(() => {
+                sessionState.processingAnswer = false;
                 if (sessionState.isActive) {
                     if (sessionState.currentQuestionIndex < questions[`label${sessionState.currentLabel}`].length) {
                         askCurrentQuestion();
@@ -594,9 +606,9 @@
             
             await speak(sessionState.currentQuestion.text);
             
-            // Start listening for answer
+            // Start listening for answer (only if not already listening)
             setTimeout(() => {
-                if (sessionState.isActive) {
+                if (sessionState.isActive && !sessionState.isListening) {
                     console.log('Starting speech recognition...');
                     try {
                         speechRecognition.start();
@@ -609,6 +621,8 @@
                             }
                         }, 2000);
                     }
+                } else if (sessionState.isListening) {
+                    console.log('Speech recognition already running, skipping start');
                 }
             }, 1000);
         }
@@ -756,7 +770,8 @@
                 isListening: false,
                 isSpeaking: false,
                 currentQuestion: null,
-                sessionHistory: []
+                sessionHistory: [],
+                processingAnswer: false
             };
             
             document.getElementById('questionDisplay').textContent = 'Нажмите "Начать" для начала урока';
