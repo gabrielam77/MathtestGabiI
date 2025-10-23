@@ -351,8 +351,8 @@
             }
 
             speechRecognition.lang = 'ru-RU';
-            speechRecognition.continuous = false;
-            speechRecognition.interimResults = false;
+            speechRecognition.continuous = true;
+            speechRecognition.interimResults = true;
             speechRecognition.maxAlternatives = 1;
 
             speechRecognition.onstart = () => {
@@ -362,9 +362,17 @@
             };
 
             speechRecognition.onresult = (event) => {
-                console.log('✅ Speech recognition RESULT:', event.results[0][0].transcript);
-                const result = event.results[0][0].transcript.toLowerCase().trim();
-                processAnswer(result);
+                console.log('✅ Speech recognition RESULT:', event.results);
+                
+                // Get the final result (not interim)
+                for (let i = event.results.length - 1; i >= 0; i--) {
+                    if (event.results[i].isFinal) {
+                        const result = event.results[i][0].transcript.toLowerCase().trim();
+                        console.log('✅ Final transcript:', result);
+                        processAnswer(result);
+                        break;
+                    }
+                }
             };
 
             speechRecognition.onerror = (event) => {
@@ -388,10 +396,20 @@
             };
 
             speechRecognition.onend = () => {
-                console.log('✅ Speech recognition ENDED');
+                console.log('✅ Speech recognition ENDED - restarting...');
                 sessionState.isListening = false;
                 if (sessionState.isActive) {
-                    updateStatus('Готов к следующему вопросу', 'waiting');
+                    // Restart recognition after a short delay
+                    setTimeout(() => {
+                        if (sessionState.isActive && !sessionState.isListening) {
+                            console.log('🔄 Restarting speech recognition...');
+                            try {
+                                speechRecognition.start();
+                            } catch (error) {
+                                console.error('Error restarting recognition:', error);
+                            }
+                        }
+                    }, 500);
                 }
             };
 
@@ -578,25 +596,10 @@
             
             // Start listening for answer
             setTimeout(() => {
-                if (sessionState.isActive && !sessionState.isListening) {
+                if (sessionState.isActive) {
                     console.log('Starting speech recognition...');
                     try {
                         speechRecognition.start();
-                        
-                        // Set a timeout to handle cases where speech recognition doesn't respond
-                        setTimeout(() => {
-                            if (sessionState.isListening && sessionState.isActive) {
-                                console.log('Speech recognition timeout - no response received');
-                                speechRecognition.stop();
-                                showError('Не услышал ответ. Попробуйте еще раз.');
-                                setTimeout(() => {
-                                    if (sessionState.isActive) {
-                                        askCurrentQuestion();
-                                    }
-                                }, 2000);
-                            }
-                        }, 10000); // 10 second timeout
-                        
                     } catch (error) {
                         console.error('Error starting speech recognition:', error);
                         showError('Ошибка запуска распознавания речи. Попробуйте еще раз.');
