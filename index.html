@@ -378,7 +378,14 @@
                             console.log('No current question set, ignoring late result');
                             return;
                         }
-                        try { speechRecognition.stop(); } catch (e) {}
+                        // Stop recognition before processing to avoid duplicate results
+                        try { 
+                            if (speechRecognition) {
+                                speechRecognition.stop(); 
+                            }
+                        } catch (error) {
+                            console.error('Error stopping recognition:', error);
+                        }
                         processAnswer(result);
                         break;
                     }
@@ -389,19 +396,37 @@
                 console.error('❌ Speech recognition ERROR:', event.error);
                 sessionState.isListening = false;
                 
-                if (event.error === 'no-speech') {
+                // Specific error handling with user-friendly messages
+                const errorMessages = {
+                    'no-speech': 'Не услышал ответ. Попробуйте еще раз.',
+                    'network': 'Проблема с интернетом. Проверьте подключение.',
+                    'not-allowed': 'Нет доступа к микрофону. Разрешите доступ в настройках браузера.',
+                    'audio-capture': 'Микрофон не найден. Проверьте подключение микрофона.',
+                    'service-not-allowed': 'Служба распознавания речи недоступна. Попробуйте позже.',
+                    'aborted': 'Распознавание прервано.',
+                    'bad-grammar': 'Ошибка в грамматике.'
+                };
+                
+                const errorMessage = errorMessages[event.error] || `Ошибка распознавания: ${event.error}`;
+                showError(errorMessage);
+                
+                // Only retry on recoverable errors
+                if (event.error === 'no-speech' && sessionState.isActive) {
                     console.log('🔄 No speech detected - retrying...');
-                    showError('Не услышал ответ. Попробуйте еще раз.');
                     setTimeout(() => {
                         if (sessionState.isActive) {
                             askCurrentQuestion();
                         }
                     }, 2000);
-                } else if (event.error === 'network') {
-                    showError('Ошибка сети. Проверьте подключение к интернету.');
-                } else {
-                    showError('Ошибка распознавания речи: ' + event.error);
+                } else if (event.error === 'network' && sessionState.isActive) {
+                    console.log('🔄 Network error - retrying...');
+                    setTimeout(() => {
+                        if (sessionState.isActive) {
+                            askCurrentQuestion();
+                        }
+                    }, 3000);
                 }
+                
                 updateStatus('Ошибка распознавания', 'waiting');
             };
 
@@ -450,18 +475,29 @@
 
         // Parse Russian number from speech
         function parseRussianNumber(speech) {
-            const trimmed = (speech || '').toString().trim();
+            if (!speech || typeof speech !== 'string') {
+                return null;
+            }
+            
+            const trimmed = speech.trim();
+            
             // If transcript contains digits (e.g., "10"), parse directly
             const digitMatch = trimmed.match(/\d+/);
             if (digitMatch) {
                 const n = parseInt(digitMatch[0], 10);
-                if (!Number.isNaN(n)) return n;
+                if (!isNaN(n) && n >= 0 && n <= 100) {
+                    return n;
+                }
             }
+            
             // Try match known russian words
             const words = trimmed.split(/\s+/);
             for (let word of words) {
-                if (russianNumbers[word]) return russianNumbers[word];
+                if (russianNumbers[word]) {
+                    return russianNumbers[word];
+                }
             }
+            
             return null;
         }
 
@@ -478,10 +514,11 @@
                 utterance.rate = parseFloat(document.getElementById('speechRate').value);
                 utterance.pitch = parseFloat(document.getElementById('speechPitch').value);
                 
-                const voiceIndex = document.getElementById('voiceSelect').value;
-                if (voiceIndex !== 'auto' && speechSynthesis.getVoices()[voiceIndex]) {
-                    utterance.voice = speechSynthesis.getVoices()[voiceIndex];
-                }
+            const voiceIndex = document.getElementById('voiceSelect').value;
+            const voices = speechSynthesis.getVoices();
+            if (voiceIndex !== 'auto' && voices[voiceIndex]) {
+                utterance.voice = voices[voiceIndex];
+            }
 
                 utterance.onstart = () => {
                     sessionState.isSpeaking = true;
@@ -545,11 +582,18 @@
             const item = document.createElement('div');
             item.className = `history-item ${isCorrect ? 'correct' : 'incorrect'}`;
             
-            const status = isCorrect ? '✓' : '✗';
-            item.innerHTML = `
-                <strong>${question}</strong><br>
-                Ваш ответ: ${userAnswer} | Правильный: ${correctAnswer} ${status}
-            `;
+            // Create elements safely to prevent XSS
+            const strong = document.createElement('strong');
+            strong.textContent = question;
+            
+            const questionDiv = document.createElement('div');
+            questionDiv.appendChild(strong);
+            
+            const detailsDiv = document.createElement('div');
+            detailsDiv.textContent = `Ваш ответ: ${userAnswer} | Правильный: ${correctAnswer} ${isCorrect ? '✓' : '✗'}`;
+            
+            item.appendChild(questionDiv);
+            item.appendChild(detailsDiv);
             
             historyList.insertBefore(item, historyList.firstChild);
             sessionState.sessionHistory.push({
@@ -567,7 +611,13 @@
             }
             sessionState.processingAnswer = true;
             // Pause recognition while processing
-            try { if (sessionState.isListening) speechRecognition.stop(); } catch (e) {}
+            try { 
+                if (sessionState.isListening && speechRecognition) {
+                    speechRecognition.stop(); 
+                }
+            } catch (error) {
+                console.error('Error stopping speech recognition:', error);
+            }
             
             const userAnswer = parseRussianNumber(speech);
             const currentQuestion = sessionState.currentQuestion;
@@ -598,8 +648,6 @@
 
             // Move to next question
             sessionState.currentQuestionIndex++;
-            // Clear currentQuestion to avoid late-result crashes
-            sessionState.currentQuestion = null;
             updateProgress();
             
             setTimeout(() => {
