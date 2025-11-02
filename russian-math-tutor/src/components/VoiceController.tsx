@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
 import { Question, Session } from '../types';
 import { QuestionService } from '../services/QuestionService';
@@ -143,6 +143,18 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({ onSessionCompl
     setStatus('Урок остановлен');
   }, [stop]);
 
+  const historyContainerRef = useRef<HTMLDivElement | null>(null);
+  const answeredQuestions = useMemo(() => {
+    if (!session) return [] as Question[];
+    return session.questions.filter(q => typeof q.userAnswer !== 'undefined');
+  }, [session]);
+
+  useEffect(() => {
+    if (historyContainerRef.current) {
+      historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight;
+    }
+  }, [answeredQuestions.length]);
+
   if (!isSupported) {
     return (
       <div className="voice-controller error">
@@ -193,6 +205,23 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({ onSessionCompl
               <h3>{currentQuestion.expression} = ?</h3>
             </div>
           )}
+
+          <div className="answer-history" ref={historyContainerRef} aria-label="История ответов">
+            <h4>История ответов</h4>
+            {answeredQuestions.length === 0 ? (
+              <p className="answer-history-empty">Пока нет ответов</p>
+            ) : (
+              <ul className="answer-list">
+                {answeredQuestions.map((q) => (
+                  <li key={q.id} className={`answer-item ${q.isCorrect ? 'correct' : 'incorrect'}`}>
+                    <span className="answer-expression">{q.expression}</span>
+                    <span className="answer-user">Ваш ответ: {String(q.userAnswer)}</span>
+                    <span className="answer-result">{q.isCorrect ? '✔ Верно' : `✘ Правильно: ${q.correctAnswer}`}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
     </div>

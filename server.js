@@ -49,4 +49,13 @@ const PORT = 8080;
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}/`);
   console.log('Press Ctrl+C to stop the server');
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Error: Port ${PORT} is already in use.`);
+    console.error('Please close the application using this port or use a different port.');
+    process.exit(1);
+  } else {
+    console.error('Server error:', err);
+    process.exit(1);
+  }
 });
